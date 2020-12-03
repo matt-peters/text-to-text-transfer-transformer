@@ -16,7 +16,6 @@
 
 from typing import Mapping, Sequence
 from unittest import mock
-from t5.data import dataset_providers
 from t5.data import feature_converters
 from t5.data import test_utils
 import tensorflow.compat.v2 as tf
@@ -26,12 +25,66 @@ tf.compat.v1.enable_eager_execution()
 assert_dataset = test_utils.assert_dataset
 
 
+class HelperFunctionsTest(tf.test.TestCase):
+
+  def test_check_lengths_strict_no_exception(self):
+    x = [{"inputs": [9, 4, 3, 8, 1], "targets": [3, 9, 4, 5]}]
+    ds = create_default_dataset(x)
+    input_lengths = {"inputs": 5, "targets": 4}
+    ds = feature_converters._check_lengths(
+        ds, input_lengths, strict=True, error_label="initial")
+    list(ds.as_numpy_iterator())
+
+  def test_check_lengths_strict_exception(self):
+    x = [{"inputs": [9, 4, 3, 8, 1], "targets": [3, 9, 4, 5]}]
+    ds = create_default_dataset(x)
+    input_lengths = {"inputs": 7, "targets": 4}
+    expected_msg = (
+        r".*Feature \\'inputs\\' has length not equal to the expected length of"
+        r" 7 during initial validation.*")
+    with self.assertRaisesRegex(tf.errors.InvalidArgumentError, expected_msg):
+      ds = feature_converters._check_lengths(
+          ds, input_lengths, strict=True, error_label="initial")
+      list(ds.as_numpy_iterator())
+
+  def test_check_lengths_not_strict_no_exception(self):
+    x = [{"inputs": [9, 4, 3, 8, 1], "targets": [3, 9, 4, 5]}]
+    ds = create_default_dataset(x)
+    input_lengths = {"inputs": 7, "targets": 4}
+    ds = feature_converters._check_lengths(
+        ds, input_lengths, strict=False, error_label="initial")
+    list(ds.as_numpy_iterator())
+
+  def test_check_lengths_not_strict_exception(self):
+    x = [{"inputs": [9, 4, 3, 8, 1], "targets": [3, 9, 4, 5]}]
+    ds = create_default_dataset(x)
+    input_lengths = {"inputs": 4, "targets": 4}
+    expected_msg = (
+        r".*Feature \\'inputs\\' has length not less than or equal to the "
+        r"expected length of 4 during initial validation.*")
+    with self.assertRaisesRegex(tf.errors.InvalidArgumentError, expected_msg):
+      ds = feature_converters._check_lengths(
+          ds, input_lengths, strict=False, error_label="initial")
+      list(ds.as_numpy_iterator())
+
+  def test_check_lengths_extra_features(self):
+    x = [{"targets": [3, 9, 4, 5], "targets_plaintext": "some text"}]
+    output_types = {"targets": tf.int64, "targets_plaintext": tf.string}
+    output_shapes = {"targets": [4], "targets_plaintext": []}
+    ds = tf.data.Dataset.from_generator(
+        lambda: x, output_types=output_types, output_shapes=output_shapes)
+    input_lengths = {"targets": 4}
+    ds = feature_converters._check_lengths(
+        ds, input_lengths, strict=True, error_label="initial")
+    list(ds.as_numpy_iterator())
+
+
 def create_default_dataset(
     x: Sequence[Mapping[str, int]],
     feature_names: Sequence[str] = ("inputs", "targets"),
     output_types: Mapping[str, tf.dtypes.DType] = None) -> tf.data.Dataset:
   if output_types is None:
-    output_types = {feature_name: tf.int64 for feature_name in feature_names}
+    output_types = {feature_name: tf.int32 for feature_name in feature_names}
 
   output_shapes = {feature_name: [None] for feature_name in feature_names}
   ds = tf.data.Dataset.from_generator(
@@ -40,6 +93,16 @@ def create_default_dataset(
 
 
 class FeatureConvertersTest(tf.test.TestCase):
+
+  def setUp(self):
+    super().setUp()
+    feature_converters.FeatureConverter.input_dtypes = {}
+    feature_converters.FeatureConverter.output_dtypes = {}
+
+  def tearDown(self):
+    del feature_converters.FeatureConverter.input_dtypes
+    del feature_converters.FeatureConverter.output_dtypes
+    super().tearDown()
 
   def test_validate_dataset_missing_feature(self):
     x = [{"targets": [3, 9, 4, 5]}]
@@ -55,7 +118,7 @@ class FeatureConvertersTest(tf.test.TestCase):
         converter._validate_dataset(
             ds,
             expected_features=input_lengths.keys(),
-            expected_dtypes={"inputs": tf.int64, "targets": tf.int64},
+            expected_dtypes={"inputs": tf.int32, "targets": tf.int32},
             expected_lengths=input_lengths,
             strict=False,
             error_label="initial")
@@ -70,7 +133,8 @@ class FeatureConvertersTest(tf.test.TestCase):
 
     with mock.patch.object(feature_converters.FeatureConverter,
                            "__abstractmethods__", set()):
-      converter = feature_converters.FeatureConverter(input_dtypes=input_dtypes)
+      feature_converters.FeatureConverter.input_dtypes = input_dtypes
+      converter = feature_converters.FeatureConverter()
       expected_msg = ("Dataset has incorrect type for feature 'inputs' during "
                       "initial validation: Got int32, expected int64")
       with self.assertRaisesRegex(ValueError, expected_msg):
@@ -144,57 +208,6 @@ class FeatureConvertersTest(tf.test.TestCase):
           expected_lengths=input_lengths,
           strict=True,
           error_label="initial")
-
-  def test_check_lengths_strict_no_exception(self):
-    x = [{"inputs": [9, 4, 3, 8, 1], "targets": [3, 9, 4, 5]}]
-    ds = create_default_dataset(x)
-    input_lengths = {"inputs": 5, "targets": 4}
-    ds = feature_converters._check_lengths(
-        ds, input_lengths, strict=True, error_label="initial")
-    list(ds.as_numpy_iterator())
-
-  def test_check_lengths_strict_exception(self):
-    x = [{"inputs": [9, 4, 3, 8, 1], "targets": [3, 9, 4, 5]}]
-    ds = create_default_dataset(x)
-    input_lengths = {"inputs": 7, "targets": 4}
-    expected_msg = (
-        r".*Feature \\'inputs\\' has length not equal to the expected length of"
-        r" 7 during initial validation.*")
-    with self.assertRaisesRegex(tf.errors.InvalidArgumentError, expected_msg):
-      ds = feature_converters._check_lengths(
-          ds, input_lengths, strict=True, error_label="initial")
-      list(ds.as_numpy_iterator())
-
-  def test_check_lengths_not_strict_no_exception(self):
-    x = [{"inputs": [9, 4, 3, 8, 1], "targets": [3, 9, 4, 5]}]
-    ds = create_default_dataset(x)
-    input_lengths = {"inputs": 7, "targets": 4}
-    ds = feature_converters._check_lengths(
-        ds, input_lengths, strict=False, error_label="initial")
-    list(ds.as_numpy_iterator())
-
-  def test_check_lengths_not_strict_exception(self):
-    x = [{"inputs": [9, 4, 3, 8, 1], "targets": [3, 9, 4, 5]}]
-    ds = create_default_dataset(x)
-    input_lengths = {"inputs": 4, "targets": 4}
-    expected_msg = (
-        r".*Feature \\'inputs\\' has length not less than or equal to the "
-        r"expected length of 4 during initial validation.*")
-    with self.assertRaisesRegex(tf.errors.InvalidArgumentError, expected_msg):
-      ds = feature_converters._check_lengths(
-          ds, input_lengths, strict=False, error_label="initial")
-      list(ds.as_numpy_iterator())
-
-  def test_check_lengths_extra_features(self):
-    x = [{"targets": [3, 9, 4, 5], "targets_plaintext": "some text"}]
-    output_types = {"targets": tf.int64, "targets_plaintext": tf.string}
-    output_shapes = {"targets": [4], "targets_plaintext": []}
-    ds = tf.data.Dataset.from_generator(
-        lambda: x, output_types=output_types, output_shapes=output_shapes)
-    input_lengths = {"targets": 4}
-    ds = feature_converters._check_lengths(
-        ds, input_lengths, strict=True, error_label="initial")
-    list(ds.as_numpy_iterator())
 
 
 if __name__ == "__main__":

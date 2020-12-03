@@ -79,6 +79,7 @@ input dataset.
 import abc
 import functools
 from typing import Mapping, Sequence
+from t5.data import utils
 import tensorflow.compat.v2 as tf
 
 
@@ -188,25 +189,29 @@ class FeatureConverter(abc.ABC):
     If pack = True, each feature in the input_features should be packable,
     i.e., 1-dimensional.
 
+    Subclasses must implement input_dtypes and output_dtypes.
+
   Attributes:
-    pack: whether to pack the dataset.
     input_dtypes: a mapping from a feature name to its data type.
     output_dtypes: a mapping from a feature name to its data type.
+    pack: whether to pack the dataset.
+    use_custom_packing_ops: whether to use custom ops for packing.
   """
+
+  input_dtypes: Mapping[str, tf.dtypes.DType]
+  output_dtypes: Mapping[str, tf.dtypes.DType]
 
   def __init__(self,
                pack: bool = True,
-               input_dtypes: Mapping[str, tf.dtypes.DType] = None,
-               output_dtypes: Mapping[str, tf.dtypes.DType] = None):
+               use_custom_packing_ops: bool = False):
     self._pack = pack
+    self._use_custom_packing_ops = use_custom_packing_ops
 
-    if input_dtypes is None:
-      input_dtypes = {feat: tf.int32 for feat in STANDARD_INPUTS}
-    self._input_dtypes = input_dtypes
+    if self.input_dtypes is None:
+      raise ValueError("input_dtypes must be defined in the subclass.")
 
-    if output_dtypes is None:
-      output_dtypes = {feat: tf.int32 for feat in STANDARD_FEATURES}
-    self._output_dtypes = output_dtypes
+    if self.output_dtypes is None:
+      raise ValueError("output_dtypes must be defined in the subclass.")
 
   def _validate_dataset(self,
                         ds: tf.data.Dataset,
@@ -279,9 +284,8 @@ class FeatureConverter(abc.ABC):
     ds = _check_lengths(ds, expected_lengths, strict, error_label)
     return ds
 
-  def __call__(
-      self, ds: tf.data.Dataset,
-      input_lengths: Mapping[str, int]) -> tf.data.Dataset:
+  def __call__(self, ds: tf.data.Dataset,
+               input_lengths: Mapping[str, int]) -> tf.data.Dataset:
     """Convert the features of `ds` into output features.
 
     This method should not be overridden by subclasses.
@@ -307,7 +311,7 @@ class FeatureConverter(abc.ABC):
     # Input dataset validation stage
     ds = self._validate_dataset(
         ds,
-        expected_features=input_lengths.keys(),
+        expected_features=self.input_dtypes.keys(),
         expected_dtypes=self.input_dtypes,
         expected_lengths=input_lengths,
         # Before pack/pad, check feature (of ds) length <= task feature length
@@ -321,19 +325,37 @@ class FeatureConverter(abc.ABC):
     output_lengths = self.get_output_lengths(input_lengths)
     ds = self._validate_dataset(
         ds,
-        expected_features=output_lengths.keys(),
+        expected_features=self.output_dtypes.keys(),
         expected_dtypes=self.output_dtypes,
         expected_lengths=output_lengths,
         # After pack/pad, check feature (of ds) length == model feature length
         strict=True,
         error_label="output_validation")
 
+    # Check one-to-one match between the output dataset and output_dtypes
+    expected_output_features = set(self.output_dtypes.keys())
+    dataset_features = set(ds.element_spec.keys())
+    if expected_output_features != dataset_features:
+      extra_features = dataset_features - expected_output_features
+      raise ValueError("The output dataset contains extra features not "
+                       f"specified in the output_dtypes: {extra_features}")
+
+    return ds
+
+  def _pack_or_pad(self,
+                   ds: tf.data.Dataset,
+                   input_lengths: Mapping[str, int]) -> tf.data.Dataset:
+    """Trim/pad to input_lengths and optionally pack the input dataset."""
+    if self.pack:
+      ds = utils.trim_and_pack_dataset(ds, input_lengths,
+                                       self._use_custom_packing_ops)
+    else:
+      ds = utils.trim_and_pad_dataset(ds, input_lengths)
     return ds
 
   @abc.abstractmethod
-  def _convert_features(
-      self, ds: tf.data.Dataset,
-      input_lengths: Mapping[str, int]) -> tf.data.Dataset:
+  def _convert_features(self, ds: tf.data.Dataset,
+                        input_lengths: Mapping[str, int]) -> tf.data.Dataset:
     """Main feature conversion method to be overridden.."""
     raise NotImplementedError
 
@@ -346,11 +368,3 @@ class FeatureConverter(abc.ABC):
   @property
   def pack(self) -> bool:
     return self._pack
-
-  @property
-  def input_dtypes(self) -> Mapping[str, tf.dtypes.DType]:
-    return self._input_dtypes
-
-  @property
-  def output_dtypes(self) -> Mapping[str, tf.dtypes.DType]:
-    return self._output_dtypes
