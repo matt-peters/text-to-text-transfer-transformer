@@ -42,7 +42,8 @@ DEFAULT_OUTPUT_FEATURES = {
 TaskRegistry.add(
     "c4_v220_span_corruption",
     TfdsTask,
-    tfds_name="c4/en:2.2.0",
+    #tfds_name="c4/en:2.2.0",
+    tfds_name="c4/en:2.3.1",
     text_preprocessor=functools.partial(
         preprocessors.rekey, key_map={"inputs": None, "targets": "text"}),
     token_preprocessor=preprocessors.span_corruption,
@@ -54,7 +55,8 @@ TaskRegistry.add(
 TaskRegistry.add(
     "c4_v220_iid_denoising",
     TfdsTask,
-    tfds_name="c4/en:2.2.0",
+    #tfds_name="c4/en:2.2.0",
+    tfds_name="c4/en:2.3.1",
     text_preprocessor=functools.partial(
         preprocessors.rekey, key_map={"inputs": None, "targets": "text"}),
     token_preprocessor=preprocessors.iid_denoising,
@@ -66,7 +68,8 @@ TaskRegistry.add(
 TaskRegistry.add(
     "c4_v220_prefix_lm",
     TfdsTask,
-    tfds_name="c4/en:2.2.0",
+    #tfds_name="c4/en:2.2.0",
+    tfds_name="c4/en:2.3.1",
     text_preprocessor=functools.partial(
         preprocessors.rekey, key_map={"inputs": None, "targets": "text"}),
     token_preprocessor=preprocessors.prefix_lm,
@@ -81,7 +84,8 @@ for config_suffix in _c4_config_suffixes:
       "c4{name}_v020_unsupervised".format(
           name=config_suffix.replace(".", "_")),
       TfdsTask,
-      tfds_name="c4/en{config}:2.2.0".format(config=config_suffix),
+      #tfds_name="c4/en{config}:2.2.0".format(config=config_suffix),
+      tfds_name="c4/en{config}:2.3.1".format(config=config_suffix),
       text_preprocessor=functools.partial(
           preprocessors.rekey, key_map={"inputs": None, "targets": "text"}),
       token_preprocessor=preprocessors.unsupervised,
@@ -118,7 +122,8 @@ for b in tfds.text.glue.Glue.builder_configs.values():
 TaskRegistry.add(
     "cnn_dailymail_v002",
     TfdsTask,
-    tfds_name="cnn_dailymail:1.0.0",
+    #tfds_name="cnn_dailymail:1.0.0",
+    tfds_name="cnn_dailymail:3.1.0",  # MP: v1.0.0 was throwing an error
     text_preprocessor=functools.partial(preprocessors.summarize,
                                         article_key="article",
                                         summary_key="highlights"),
