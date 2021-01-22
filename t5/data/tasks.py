@@ -111,6 +111,7 @@ for b in tfds.text.glue.Glue.builder_configs.values():
       "glue_%s_v002" % b.name,
       TfdsTask,
       tfds_name="glue/%s:1.0.0" % b.name,
+      #tfds_name="glue/%s:1.0.1" % b.name,      # MP: URL from 1.0.0 is dead
       text_preprocessor=get_glue_text_preprocessor(b),
       metric_fns=get_glue_metric(b.name),
       output_features=DEFAULT_OUTPUT_FEATURES,
@@ -123,7 +124,7 @@ TaskRegistry.add(
     "cnn_dailymail_v002",
     TfdsTask,
     #tfds_name="cnn_dailymail:1.0.0",
-    tfds_name="cnn_dailymail:3.1.0",  # MP: v1.0.0 was throwing an error
+    tfds_name="cnn_dailymail:3.1.0",
     text_preprocessor=functools.partial(preprocessors.summarize,
                                         article_key="article",
                                         summary_key="highlights"),

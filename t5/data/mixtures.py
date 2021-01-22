@@ -27,6 +27,7 @@ _GLUE_WEIGHT_MAPPING = get_glue_weight_mapping()
 _SUPER_GLUE_WEIGHT_MAPPING = get_super_glue_weight_mapping()
 
 _glue_tasks = list(_GLUE_WEIGHT_MAPPING.keys())
+_glue_tasks_noqqp = [key for key in _GLUE_WEIGHT_MAPPING.keys() if 'qqp' not in key]
 _glue_tasks_with_weight = list(_GLUE_WEIGHT_MAPPING.items())
 
 _wsc_dpr_tasks = [
@@ -46,6 +47,16 @@ _supervised_tasks = (
      "wmt15_enfr_v003",
      "wmt16_enro_v003"]
 )
+
+_supervised_tasks_noqqp = (
+    _glue_tasks_noqqp + _super_glue_tasks +
+    ["cnn_dailymail_v002",
+     "squad_v010_allanswers",
+     "wmt_t2t_ende_v003",
+     "wmt15_enfr_v003",
+     "wmt16_enro_v003"]
+)
+
 
 # Tasks is not the best description. For example, glue_v002_equal refers to a
 # mixture. Calling it "finetune tasks" because we consider all glue tasks as
@@ -135,6 +146,13 @@ MixtureRegistry.add(
     ([("c4_v020_unsupervised", rate_unsupervised)] +
      [(t, _dedupe(t)) for t in _supervised_tasks]),
 )
+
+MixtureRegistry.add(
+    "all_mix_noqqp",
+    ([("c4_v020_unsupervised", rate_unsupervised)] +
+     [(t, _dedupe(t)) for t in _supervised_tasks_noqqp]),
+)
+
 
 # ================== Leave-one-out cotrain then finetune =======================
 

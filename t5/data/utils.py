@@ -107,7 +107,7 @@ class LazyTfdsLoader(object):
     builder_key = (self.name, self.data_dir)
     if builder_key not in LazyTfdsLoader._MEMOIZED_BUILDERS:
       LazyTfdsLoader._MEMOIZED_BUILDERS[builder_key] = tfds.builder(
-          self.name, data_dir=self.data_dir)
+          self.name, data_dir=self.data_dir, try_gcs=True)
     return LazyTfdsLoader._MEMOIZED_BUILDERS[builder_key]
 
   @property
